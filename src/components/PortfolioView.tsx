@@ -42,6 +42,120 @@ interface PortfolioHistoryChartProps {
   showLakhFormat: boolean;
 }
 
+interface PriceComparisonChartProps {
+  holdings: StockHolding[];
+  showLakhFormat: boolean;
+}
+
+const PriceComparisonChart: React.FC<PriceComparisonChartProps> = ({ holdings, showLakhFormat }) => {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const comparable = holdings.filter((holding) =>
+    typeof holding.pricePerShare === 'number' && holding.pricePerShare > 0 &&
+    typeof holding.averageBuyingPrice === 'number' && holding.averageBuyingPrice > 0
+  );
+
+  if (comparable.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-[#D5DFDA] bg-[#F8FAF9] p-6 text-center">
+        <TrendingUp className="mx-auto h-7 w-7 text-[#52635D]/60" />
+        <p className="mt-2 text-sm font-semibold text-[#172522]">Add average buying prices to compare your positions.</p>
+        <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-[#52635D]">
+          Open each holding below and enter the average amount you paid per share. Horizon will compare it with the current saved price here.
+        </p>
+      </div>
+    );
+  }
+
+  const maxPrice = Math.max(...comparable.flatMap((holding) => [holding.pricePerShare!, holding.averageBuyingPrice!]), 1) * 1.1;
+  const ticks = Array.from({ length: 5 }, (_, index) => (maxPrice / 4) * index);
+  const selected = activeIndex === null ? null : comparable[activeIndex];
+
+  const moveSelection = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    setActiveIndex((current) => {
+      if (event.key === 'Home') return 0;
+      if (event.key === 'End') return comparable.length - 1;
+      const start = current ?? 0;
+      return Math.max(0, Math.min(comparable.length - 1, start + (event.key === 'ArrowDown' ? 1 : -1)));
+    });
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[#52635D]">
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#8A9A93]" />Average buying price</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#176B52]" />Current price above buy</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-rose-600" />Current price below buy</span>
+      </div>
+      <div
+        className="relative rounded-xl border border-[#D5DFDA] bg-[#F8FAF9] p-2 outline-none focus-visible:ring-2 focus-visible:ring-[#176B52] focus-visible:ring-offset-2"
+        tabIndex={0}
+        onFocus={() => setActiveIndex((current) => current ?? 0)}
+        onBlur={() => setActiveIndex(null)}
+        onKeyDown={moveSelection}
+        aria-label="Interactive current price versus average buying price chart. Use up and down arrow keys to inspect holdings."
+        data-testid="price-comparison-chart"
+      >
+        <div
+          className="px-2 pb-2 pt-3"
+          role="img"
+          aria-label={`Current price compared with average buying price for ${comparable.length} holdings`}
+          data-testid="price-comparison-plot"
+          onPointerLeave={() => setActiveIndex(null)}
+        >
+          {comparable.map((holding, index) => {
+            const buyPercent = (holding.averageBuyingPrice! / maxPrice) * 100;
+            const currentPercent = (holding.pricePerShare! / maxPrice) * 100;
+            const isGain = holding.pricePerShare! >= holding.averageBuyingPrice!;
+            const color = isGain ? '#176B52' : '#BE123C';
+            return (
+              <div
+                key={holding.id}
+                className={`grid grid-cols-[52px_1fr] items-center gap-2 rounded-lg py-3 transition-opacity ${activeIndex === null || activeIndex === index ? 'opacity-100' : 'opacity-45'}`}
+                onPointerEnter={() => setActiveIndex(index)}
+              >
+                <span className="truncate text-right text-xs font-bold text-[#172522]">{holding.symbol || holding.symbolOrName.slice(0, 8)}</span>
+                <span className="relative block h-7 border-x border-[#D5DFDA] bg-[linear-gradient(to_right,#D5DFDA_1px,transparent_1px)] bg-[length:25%_100%]">
+                  <span
+                    className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full"
+                    style={{ left: `${Math.min(buyPercent, currentPercent)}%`, width: `${Math.abs(currentPercent - buyPercent)}%`, backgroundColor: color }}
+                  />
+                  <span className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-[#8A9A93] bg-white" style={{ left: `${buyPercent}%` }} />
+                  <span className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] bg-white" style={{ left: `${currentPercent}%`, borderColor: color }} />
+                </span>
+              </div>
+            );
+          })}
+          <div className="ml-[60px] mt-1 grid grid-cols-5 text-[10px] tabular-nums text-[#52635D]">
+            {ticks.map((tick, index) => (
+              <span key={tick} className={index === 0 ? 'text-left' : index === ticks.length - 1 ? 'text-right' : 'text-center'}>{formatPKR(tick, { compact: true })}</span>
+            ))}
+          </div>
+          <p className="ml-[60px] mt-1 text-center text-[11px] font-semibold text-[#52635D]">Price per share (PKR)</p>
+        </div>
+        {selected && (
+          <div
+            className="pointer-events-none absolute left-1/2 top-4 z-10 w-[220px] -translate-x-1/2 rounded-xl border border-[#B8CCC4] bg-white p-3 text-[11px] shadow-lg"
+            role="status"
+            data-testid="price-comparison-tooltip"
+          >
+            <div className="font-bold text-[#172522]">{selected.symbol || selected.symbolOrName}</div>
+            <div className="mt-2 space-y-1.5 tabular-nums">
+              <div className="flex justify-between gap-4 text-[#52635D]"><span>Average buy</span><strong className="text-[#172522]">{formatPKR(selected.averageBuyingPrice!, { useLakhFormat: showLakhFormat })}</strong></div>
+              <div className="flex justify-between gap-4 text-[#52635D]"><span>Current price</span><strong className="text-[#172522]">{formatPKR(selected.pricePerShare!, { useLakhFormat: showLakhFormat })}</strong></div>
+              <div className="flex justify-between gap-4 text-[#52635D]"><span>Difference</span><strong className={selected.pricePerShare! >= selected.averageBuyingPrice! ? 'text-[#176B52]' : 'text-rose-700'}>{selected.pricePerShare! >= selected.averageBuyingPrice! ? '+' : ''}{formatPKR(selected.pricePerShare! - selected.averageBuyingPrice!, { useLakhFormat: showLakhFormat })}</strong></div>
+            </div>
+          </div>
+        )}
+      </div>
+      {comparable.length < holdings.length && (
+        <p className="text-[11px] text-amber-800">Showing {comparable.length} of {holdings.length} holdings. Add buying prices to include the rest.</p>
+      )}
+    </div>
+  );
+};
+
 const PortfolioHistoryChart: React.FC<PortfolioHistoryChartProps> = ({ snapshots, view, showLakhFormat }) => {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const width = 640;
@@ -384,6 +498,15 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
             )}
           </div>
         )}
+      </div>
+
+      {/* Portfolio Chart Section */}
+      <div className="bg-[#FFFFFF] border border-[#D5DFDA] rounded-2xl p-5 sm:p-7 shadow-xs space-y-4">
+        <div className="border-b border-[#D5DFDA] pb-3">
+          <h2 className="text-base font-bold text-[#172522]">Current price vs average buy</h2>
+          <p className="mt-0.5 text-xs text-[#52635D]">Compare your saved price per share with the average price you paid for each holding.</p>
+        </div>
+        <PriceComparisonChart holdings={stockHoldings} showLakhFormat={showLakhFormat} />
       </div>
 
       {/* Portfolio Chart Section */}

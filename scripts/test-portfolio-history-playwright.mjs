@@ -56,6 +56,21 @@ try {
   }, { state, snapshotKey });
   await page.reload();
 
+  await page.getByRole('heading', { name: 'Current price vs average buy', exact: true }).waitFor();
+  const comparison = page.getByTestId('price-comparison-chart');
+  const comparisonPlot = page.getByTestId('price-comparison-plot');
+  const comparisonBounds = await comparisonPlot.boundingBox();
+  assert.ok(comparisonBounds);
+  await comparisonPlot.hover({ position: { x: comparisonBounds.width * 0.55, y: 24 } });
+  const comparisonTooltip = page.getByTestId('price-comparison-tooltip');
+  await comparisonTooltip.waitFor();
+  assert.match(await comparisonTooltip.innerText(), /Average buy\s+Rs\. 500/);
+  assert.match(await comparisonTooltip.innerText(), /Current price\s+Rs\. 550/);
+  assert.match(await comparisonTooltip.innerText(), /Difference\s+\+Rs\. 50/);
+  await comparison.focus();
+  await comparison.press('Home');
+  assert.match(await comparisonTooltip.innerText(), /FFC/);
+
   await page.getByRole('heading', { name: 'Portfolio History', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Gain/loss', exact: true }).click();
   const chart = page.getByTestId('portfolio-history-chart');
@@ -92,7 +107,7 @@ try {
   assert.match(await tooltip.innerText(), /Rs\. 7,000/);
   assert.deepEqual(errors, []);
   await page.screenshot({ path: `${outputDir}/gain-loss-two-observations.png`, fullPage: true });
-  console.log('PASS: gain/loss line graph renders its first snapshot, connects a price-edit observation, and supports pointer and keyboard inspection.');
+  console.log('PASS: price-vs-buy comparison and gain/loss history both render, persist updates, and support pointer and keyboard inspection.');
 } finally {
   await browser?.close();
   server.kill();

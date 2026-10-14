@@ -1,0 +1,8 @@
+{
+  "name": "Horizon-2",
+  "description": "A calm, mobile-first investing companion for ordinary people in Pakistan to understand their starting position, choose a sustainable monthly investment, and explore financial outcomes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "app": "horizon_investing_companion",
+  "schemaVersion": 2,
+  "exportedAt": "2026-10-14T10:56:19.820Z",
+  "data": {
+    "state": {
+      "version": 2,
+      "currentStep": 5,
+      "hasCompletedOnboarding": true,
+      "showLakhFormat": false,
+      "investmentChoice": "stocks_detail",
+      "stockHoldings": [
+        {
+          "id": "holding-original",
+          "symbolOrName": "FFC",
+          "symbol": "FFC",
+          "sector": "Unassigned",
+          "instrumentType": "equity",
+          "isVerifiedPsx": true,
+          "entryMode": "shares_and_price",
+          "shares": 10,
+          "pricePerShare": 90,
+          "marketValue": 900,
+          "averageBuyingPrice": 100,
+          "purchaseDate": "2026-01-02",
+          "priceProvenance": "user_manual",
+          "priceStatus": "manual",
+          "priceAsOf": "2026-01-02",
+          "fetchedAt": "2026-01-02T12:00:00Z",
+          "marketAsOf": null
+        }
+      ],
+      "totalInvestmentsValue": 900,
+      "cashAvailableToInvest": 1234,
+      "trackedWealth": [
+        {
+          "id": "cash",
+          "category": "emergency_cash",
+          "label": "Emergency cash",
+          "amount": 5000
+        }
+      ],
+      "monthlyChoice": "enter_amount",
+      "budget": {
+        "monthlyIncome": 100000,
+        "monthlyExpenses": 50000,
+        "monthlyCashSavingsCommitment": 5000
+      },
+      "monthlyInvestment": 20000,
+      "annualStepUpPercent": 7.5,
+      "assumptions": {
+        "timeHorizonYears": 2,
+        "assumedAnnualReturnRate": -0.05,
+        "assumedAnnualInflationRate": 0.08,
+        "shariahPreference": false,
+        "goalTitle": "Round trip"
+      },
+      "journeySchedule": {
+        "isActive": true,
+        "startMonth": "2026-01",
+        "contributionDay": 5,
+        "originalMonthlyAmount": 20000,
+        "originalStepUpPercent": 7.5,
+        "originalHorizonYears": 2,
+        "originalReturnRate": -0.05,
+        "originalInflationRate": 0.08,
+        "createdAt": "2026-01-01T00:00:00Z"
+      },
+      "contributionRecords": [
+        {
+          "id": "deposit-original",
+          "monthKey": "2026-01",
+          "amount": 5000,
+          "date": "2026-01-05",
+          "note": "First deposit",
+          "status": "partly_added"
+        }
+      ],
+      "catchUpCommitment": {
+        "strategy": "next_month",
+        "targetMonthKey": "2026-11",
+        "totalGapAmount": 15000,
+        "monthlyAllocations": {
+          "2026-11": 15000
+        },
+        "appliedAt": "2026-10-01T00:00:00Z"
+      },
+      "monthDecisions": {
+        "2026-02": {
+          "decision": "skipped",
+          "decidedAt": "2026-02-06T00:00:00Z"
+        }
+      },
+      "lastSelectedTab": "journey",
+      "lastUpdated": "2026-10-01T00:00:00Z"
+    },
+    "portfolioSnapshots": [
+      {
+        "timestamp": "2026-01-02T12:00:00Z",
+        "totalMarketValue": 900,
+        "totalCostBasis": 1000,
+        "eligibleCostBasisForPnL": 1000,
+        "eligibleMarketValueForPnL": 900,
+        "totalUnrealisedPnL": -100,
+        "holdingsCount": 1,
+        "holdingsWithCostBasisCount": 1,
+        "valuationComplete": true,
+        "holdingsSummary": [
+          {
+            "symbol": "FFC",
+            "shares": 10,
+            "currentPrice": 90,
+            "averageBuyingPrice": 100,
+            "marketValue": 900,
+            "costBasis": 1000,
+            "unrealisedPnL": -100
+          }
+        ]
+      }
+    ],
+    "lastSelectedTab": "journey"
+  }
+}

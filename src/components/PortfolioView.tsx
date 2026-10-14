@@ -86,6 +86,19 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
     totalCostBasisKnown > 0 ? (totalUnrealisedPnL / totalCostBasisKnown) * 100 : undefined;
 
   const isPartialPnL = holdingsWithCostBasisCount < stockHoldings.length;
+  const chartSnapshots = chartView === 'pnl'
+    ? snapshots.filter((snapshot) => snapshot.holdingsWithCostBasisCount > 0)
+    : snapshots;
+  const latestChartValue = chartSnapshots.length > 0
+    ? chartView === 'value'
+      ? chartSnapshots[chartSnapshots.length - 1].totalMarketValue
+      : chartSnapshots[chartSnapshots.length - 1].totalUnrealisedPnL
+    : undefined;
+  const chartHasRepeatedDates = chartSnapshots.some((snapshot, index) =>
+    chartSnapshots.slice(0, index).some((previous) =>
+      new Date(previous.timestamp).toDateString() === new Date(snapshot.timestamp).toDateString()
+    )
+  );
 
   // First snapshot date for "Tracked since [date]"
   const trackedSinceDate =
@@ -260,14 +273,18 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
           </div>
         </div>
 
-        {snapshots.length < 2 ? (
+        {chartSnapshots.length === 0 ? (
           <div className="p-8 text-center bg-[#F8FAF9] border border-dashed border-[#D5DFDA] rounded-xl space-y-2">
             <PieChart className="w-8 h-8 text-[#52635D]/60 mx-auto" />
             <span className="text-sm font-semibold text-[#172522] block">
-              Your chart will grow as you check your portfolio over time.
+              {chartView === 'pnl' && snapshots.length > 0
+                ? 'Add a buying price to track gain/loss.'
+                : 'Your chart will start after your first portfolio check.'}
             </span>
             <p className="text-xs text-[#52635D] max-w-sm mx-auto">
-              Horizon records portfolio snapshots on your device as you review your holdings. Check back after updating prices or adding positions.
+              {chartView === 'pnl' && snapshots.length > 0
+                ? 'Gain/loss requires shares and an average buying price. Open a holding to add the average amount paid per share.'
+                : 'Horizon records portfolio snapshots on this device as you review holdings with a current value.'}
             </p>
           </div>
         ) : (
@@ -276,21 +293,25 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
             <div className="h-48 w-full bg-[#F8FAF9] border border-[#D5DFDA] rounded-xl p-4 flex flex-col justify-between">
               <div className="flex justify-between text-xs text-[#52635D]">
                 <span>{chartView === 'value' ? 'Total Portfolio Value' : 'Unrealised Gain / Loss'}</span>
-                <span>{snapshots.length} observation(s)</span>
+                <span className={`font-semibold tabular-nums ${chartView === 'pnl' && latestChartValue! < 0 ? 'text-rose-700' : 'text-[#176B52]'}`}>
+                  {chartView === 'pnl' && latestChartValue! >= 0 ? '+' : ''}{formatPKR(latestChartValue ?? 0, { useLakhFormat: showLakhFormat })}
+                </span>
               </div>
 
-              <div className="flex items-end h-28 gap-2 px-2 pt-4 border-b border-[#D5DFDA]">
-                {snapshots.map((snap, idx) => {
+              <div className="flex items-end h-28 gap-2 px-2 pt-4 border-b border-[#D5DFDA]" data-testid="portfolio-history-chart">
+                {chartSnapshots.map((snap) => {
                   const val = chartView === 'value' ? snap.totalMarketValue : snap.totalUnrealisedPnL;
-                  const maxVal = Math.max(...snapshots.map((s) => Math.abs(chartView === 'value' ? s.totalMarketValue : s.totalUnrealisedPnL)), 1);
+                  const maxVal = Math.max(...chartSnapshots.map((s) => Math.abs(chartView === 'value' ? s.totalMarketValue : s.totalUnrealisedPnL)), 1);
                   const heightPct = Math.max(15, Math.min(100, (Math.abs(val) / maxVal) * 100));
-                  const dateLabel = new Date(snap.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                  const dateLabel = chartHasRepeatedDates
+                    ? new Date(snap.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })
+                    : new Date(snap.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
                   return (
-                    <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group relative">
+                    <div key={snap.timestamp} className="flex-1 flex flex-col items-center h-full justify-end group relative">
                       <div
                         style={{ height: `${heightPct}%` }}
-                        className={`w-full max-w-[32px] rounded-t transition-all ${
+                        className={`w-full max-w-[32px] rounded-t transition-all group-hover:opacity-80 ${
                           chartView === 'pnl' && val < 0 ? 'bg-rose-600' : 'bg-[#176B52]'
                         }`}
                         title={`${dateLabel}: ${formatPKR(val)}`}
@@ -304,8 +325,12 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
               </div>
 
               <div className="flex justify-between text-[11px] text-[#52635D]">
-                <span>First: {new Date(snapshots[0].timestamp).toLocaleDateString()}</span>
-                <span>Latest: {new Date(snapshots[snapshots.length - 1].timestamp).toLocaleDateString()}</span>
+                <span>{chartSnapshots.length} {chartSnapshots.length === 1 ? 'observation' : 'observations'}</span>
+                <span>
+                  {chartSnapshots.length === 1
+                    ? 'Update a price or position to build the trend.'
+                    : `${new Date(chartSnapshots[0].timestamp).toLocaleDateString()} – ${new Date(chartSnapshots[chartSnapshots.length - 1].timestamp).toLocaleDateString()}`}
+                </span>
               </div>
             </div>
           </div>

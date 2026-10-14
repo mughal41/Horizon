@@ -242,8 +242,9 @@ export const StockDetailModal: React.FC<StockDetailModalProps> = ({
           /* Edit Form */
           <form onSubmit={handleSave} className="space-y-4 text-xs">
             <div>
-              <label className="font-semibold text-[#172522] block mb-1">Number of shares</label>
+              <label htmlFor="holding-shares" className="font-semibold text-[#172522] block mb-1">Number of shares</label>
               <input
+                id="holding-shares"
                 type="number"
                 value={shares}
                 onChange={(e) => setShares(e.target.value)}
@@ -255,9 +256,10 @@ export const StockDetailModal: React.FC<StockDetailModalProps> = ({
             </div>
 
             <div>
-              <label className="font-semibold text-[#172522] block mb-1">Current price per share (PKR)</label>
+              <label htmlFor="holding-current-price" className="font-semibold text-[#172522] block mb-1">Current price per share (PKR)</label>
               <div className="flex gap-2">
                 <input
+                  id="holding-current-price"
                   type="number"
                   value={pricePerShare}
                   onChange={(e) => setPricePerShare(e.target.value)}
@@ -271,10 +273,11 @@ export const StockDetailModal: React.FC<StockDetailModalProps> = ({
 
             <div>
               <div className="flex justify-between items-baseline mb-1">
-                <label className="font-semibold text-[#172522]">Average buying price (PKR)</label>
+                <label htmlFor="holding-average-buying-price" className="font-semibold text-[#172522]">Average buying price (PKR)</label>
                 <span className="text-[11px] text-[#52635D]">Optional</span>
               </div>
               <input
+                id="holding-average-buying-price"
                 type="number"
                 value={avgBuyingPrice}
                 onChange={(e) => setAvgBuyingPrice(e.target.value)}
@@ -290,10 +293,11 @@ export const StockDetailModal: React.FC<StockDetailModalProps> = ({
 
             <div>
               <div className="flex justify-between items-baseline mb-1">
-                <label className="font-semibold text-[#172522]">Purchase date</label>
+                <label htmlFor="holding-purchase-date" className="font-semibold text-[#172522]">Purchase date</label>
                 <span className="text-[11px] text-[#52635D]">Optional</span>
               </div>
               <input
+                id="holding-purchase-date"
                 type="text"
                 value={purchaseDate}
                 onChange={(e) => setPurchaseDate(e.target.value)}

@@ -77,9 +77,22 @@ try {
   assert.equal(snapshots.length, 2);
   assert.equal(snapshots[0].totalUnrealisedPnL, 5000);
   assert.equal(snapshots[1].totalUnrealisedPnL, 7000);
+  const historySvg = chart.locator('svg');
+  assert.ok(await historySvg.locator('path').count() >= 2, 'Line and area paths render');
+  const bounds = await historySvg.boundingBox();
+  assert.ok(bounds);
+  await historySvg.hover({ position: { x: bounds.width * 0.8, y: bounds.height * 0.5 } });
+  const tooltip = page.getByTestId('portfolio-history-tooltip');
+  await tooltip.waitFor();
+  assert.match(await tooltip.innerText(), /Rs\. 7,000/);
+  await chart.focus();
+  await chart.press('Home');
+  assert.match(await tooltip.innerText(), /Rs\. 5,000/);
+  await chart.press('End');
+  assert.match(await tooltip.innerText(), /Rs\. 7,000/);
   assert.deepEqual(errors, []);
   await page.screenshot({ path: `${outputDir}/gain-loss-two-observations.png`, fullPage: true });
-  console.log('PASS: gain/loss history renders its first snapshot and adds a second point after a holding price edit.');
+  console.log('PASS: gain/loss line graph renders its first snapshot, connects a price-edit observation, and supports pointer and keyboard inspection.');
 } finally {
   await browser?.close();
   server.kill();

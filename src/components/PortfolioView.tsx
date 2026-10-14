@@ -36,6 +36,172 @@ interface PortfolioViewProps {
   onNavigateStep: (step: number) => void;
 }
 
+interface PortfolioHistoryChartProps {
+  snapshots: PortfolioSnapshot[];
+  view: 'value' | 'pnl';
+  showLakhFormat: boolean;
+}
+
+const PortfolioHistoryChart: React.FC<PortfolioHistoryChartProps> = ({ snapshots, view, showLakhFormat }) => {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const width = 640;
+  const height = 270;
+  const margin = { top: 18, right: 18, bottom: 48, left: 82 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const values = snapshots.map((snapshot) => view === 'value' ? snapshot.totalMarketValue : snapshot.totalUnrealisedPnL);
+  const latestValue = values[values.length - 1];
+  const lineColor = view === 'pnl' && latestValue < 0 ? '#BE123C' : '#176B52';
+  const fillColor = view === 'pnl' && latestValue < 0 ? '#E11D48' : '#176B52';
+
+  let minValue = view === 'pnl' ? Math.min(0, ...values) : 0;
+  let maxValue = Math.max(0, ...values);
+  if (minValue === maxValue) {
+    const fallback = Math.max(1, snapshots[snapshots.length - 1].totalCostBasis * 0.05);
+    minValue = view === 'pnl' ? -fallback : 0;
+    maxValue = fallback;
+  } else {
+    if (minValue < 0) minValue *= 1.1;
+    if (maxValue > 0) maxValue *= 1.1;
+  }
+  const range = maxValue - minValue;
+  const getX = (index: number) => snapshots.length === 1
+    ? margin.left + plotWidth / 2
+    : margin.left + (index / (snapshots.length - 1)) * plotWidth;
+  const getY = (value: number) => margin.top + ((maxValue - value) / range) * plotHeight;
+  const path = values.map((value, index) => `${index === 0 ? 'M' : 'L'} ${getX(index)} ${getY(value)}`).join(' ');
+  const baselineY = getY(view === 'pnl' ? 0 : minValue);
+  const yTicks = Array.from({ length: 5 }, (_, index) => minValue + (range / 4) * index);
+  const xTickIndexes = Array.from(new Set([0, Math.round((snapshots.length - 1) / 2), snapshots.length - 1]));
+  const hasRepeatedDates = snapshots.some((snapshot, index) => snapshots.slice(0, index).some(
+    (previous) => new Date(previous.timestamp).toDateString() === new Date(snapshot.timestamp).toDateString()
+  ));
+  const formatTime = (timestamp: string) => hasRepeatedDates
+    ? new Date(timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })
+    : new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const selected = activeIndex === null ? null : snapshots[activeIndex];
+  const selectedValue = activeIndex === null ? null : values[activeIndex];
+  const selectedX = activeIndex === null ? 0 : getX(activeIndex);
+  const tooltipLeft = (selectedX / width) * 100;
+
+  const selectFromPointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - bounds.left) / bounds.width) * width;
+    if (snapshots.length === 1) {
+      setActiveIndex(0);
+      return;
+    }
+    const ratio = Math.max(0, Math.min(1, (x - margin.left) / plotWidth));
+    setActiveIndex(Math.round(ratio * (snapshots.length - 1)));
+  };
+
+  const moveSelection = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    setActiveIndex((current) => {
+      if (event.key === 'Home') return 0;
+      if (event.key === 'End') return snapshots.length - 1;
+      const start = current ?? snapshots.length - 1;
+      return Math.max(0, Math.min(snapshots.length - 1, start + (event.key === 'ArrowRight' ? 1 : -1)));
+    });
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3 text-xs text-[#52635D]">
+        <span>{view === 'value' ? 'Total Portfolio Value' : 'Unrealised Gain / Loss'}</span>
+        <span className={`font-bold tabular-nums ${view === 'pnl' && latestValue < 0 ? 'text-rose-700' : 'text-[#176B52]'}`}>
+          {view === 'pnl' && latestValue >= 0 ? '+' : ''}{formatPKR(latestValue, { useLakhFormat: showLakhFormat })}
+        </span>
+      </div>
+      <div
+        className="relative rounded-xl border border-[#D5DFDA] bg-[#F8FAF9] px-2 pb-2 pt-3 outline-none focus-visible:ring-2 focus-visible:ring-[#176B52] focus-visible:ring-offset-2"
+        tabIndex={0}
+        onFocus={() => setActiveIndex((current) => current ?? snapshots.length - 1)}
+        onBlur={() => setActiveIndex(null)}
+        onKeyDown={moveSelection}
+        aria-label={`Interactive ${view === 'value' ? 'portfolio value' : 'gain and loss'} history chart. Use left and right arrow keys to inspect observations.`}
+        data-testid="portfolio-history-chart"
+      >
+        <div className="overflow-x-auto">
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            className="h-[240px] min-w-[540px] w-full touch-pan-x"
+            role="img"
+            aria-label={`${view === 'value' ? 'Portfolio value' : 'Unrealised gain and loss'} over ${snapshots.length} observations`}
+            onPointerMove={selectFromPointer}
+            onPointerLeave={() => setActiveIndex(null)}
+          >
+            <defs>
+              <linearGradient id={`portfolio-history-area-${view}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={fillColor} stopOpacity="0.22" />
+                <stop offset="100%" stopColor={fillColor} stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
+            {yTicks.map((tick, index) => {
+              const y = getY(tick);
+              return (
+                <g key={index}>
+                  <line x1={margin.left} y1={y} x2={width - margin.right} y2={y} stroke="#D5DFDA" strokeWidth="1" />
+                  <text x={margin.left - 10} y={y + 4} textAnchor="end" fill="#52635D" fontSize="11">
+                    {formatPKR(tick, { compact: true })}
+                  </text>
+                </g>
+              );
+            })}
+            {xTickIndexes.map((index) => (
+              <text key={index} x={getX(index)} y={height - 17} textAnchor="middle" fill="#52635D" fontSize="11">
+                {formatTime(snapshots[index].timestamp)}
+              </text>
+            ))}
+            <text x={15} y={margin.top + plotHeight / 2} transform={`rotate(-90 15 ${margin.top + plotHeight / 2})`} textAnchor="middle" fill="#52635D" fontSize="11" fontWeight="600">
+              {view === 'value' ? 'Portfolio value (PKR)' : 'Gain / loss (PKR)'}
+            </text>
+            <text x={margin.left + plotWidth / 2} y={height - 1} textAnchor="middle" fill="#52635D" fontSize="11" fontWeight="600">
+              Observation time
+            </text>
+            {view === 'pnl' && (
+              <line x1={margin.left} y1={baselineY} x2={width - margin.right} y2={baselineY} stroke="#52635D" strokeWidth="1.5" strokeDasharray="5 4" />
+            )}
+            <path
+              d={`${path} L ${getX(snapshots.length - 1)} ${baselineY} L ${getX(0)} ${baselineY} Z`}
+              fill={`url(#portfolio-history-area-${view})`}
+              pointerEvents="none"
+            />
+            {snapshots.length > 1 && (
+              <path d={path} fill="none" stroke={lineColor} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
+            )}
+            {snapshots.map((snapshot, index) => (
+              <circle key={`${snapshot.timestamp}-${index}`} cx={getX(index)} cy={getY(values[index])} r={activeIndex === index ? 6 : 4.5} fill="#FFFFFF" stroke={lineColor} strokeWidth="3" pointerEvents="none" />
+            ))}
+            {selected && selectedValue !== null && activeIndex !== null && (
+              <line x1={selectedX} y1={margin.top} x2={selectedX} y2={margin.top + plotHeight} stroke={lineColor} strokeWidth="1" strokeDasharray="3 3" pointerEvents="none" />
+            )}
+          </svg>
+        </div>
+        {selected && selectedValue !== null && (
+          <div
+            className={`pointer-events-none absolute top-5 z-10 min-w-[205px] rounded-xl border border-[#B8CCC4] bg-white p-3 text-[11px] shadow-lg ${tooltipLeft > 67 ? '-translate-x-full' : tooltipLeft < 33 ? '' : '-translate-x-1/2'}`}
+            style={{ left: `${Math.max(3, Math.min(97, tooltipLeft))}%` }}
+            role="status"
+            data-testid="portfolio-history-tooltip"
+          >
+            <div className="font-bold text-[#172522]">{new Date(selected.timestamp).toLocaleString()}</div>
+            <div className={`mt-1 text-sm font-extrabold tabular-nums ${view === 'pnl' && selectedValue < 0 ? 'text-rose-700' : 'text-[#176B52]'}`}>
+              {view === 'pnl' && selectedValue >= 0 ? '+' : ''}{formatPKR(selectedValue, { useLakhFormat: showLakhFormat })}
+            </div>
+            <div className="mt-1 text-[#52635D]">{selected.changeNote || 'Portfolio observation'}</div>
+          </div>
+        )}
+      </div>
+      <div className="flex flex-col gap-0.5 text-[11px] text-[#52635D] sm:flex-row sm:justify-between">
+        <span>{snapshots.length} {snapshots.length === 1 ? 'observation' : 'observations'}</span>
+        <span>{snapshots.length === 1 ? 'Update a price or position to build the trend.' : 'Hover, tap, or use arrow keys to inspect history.'}</span>
+      </div>
+    </div>
+  );
+};
+
 export const PortfolioView: React.FC<PortfolioViewProps> = ({
   stockHoldings,
   onChangeHoldings,
@@ -89,16 +255,6 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
   const chartSnapshots = chartView === 'pnl'
     ? snapshots.filter((snapshot) => snapshot.holdingsWithCostBasisCount > 0)
     : snapshots;
-  const latestChartValue = chartSnapshots.length > 0
-    ? chartView === 'value'
-      ? chartSnapshots[chartSnapshots.length - 1].totalMarketValue
-      : chartSnapshots[chartSnapshots.length - 1].totalUnrealisedPnL
-    : undefined;
-  const chartHasRepeatedDates = chartSnapshots.some((snapshot, index) =>
-    chartSnapshots.slice(0, index).some((previous) =>
-      new Date(previous.timestamp).toDateString() === new Date(snapshot.timestamp).toDateString()
-    )
-  );
 
   // First snapshot date for "Tracked since [date]"
   const trackedSinceDate =
@@ -288,52 +444,7 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Simple SVG Trend Visualizer */}
-            <div className="h-48 w-full bg-[#F8FAF9] border border-[#D5DFDA] rounded-xl p-4 flex flex-col justify-between">
-              <div className="flex justify-between text-xs text-[#52635D]">
-                <span>{chartView === 'value' ? 'Total Portfolio Value' : 'Unrealised Gain / Loss'}</span>
-                <span className={`font-semibold tabular-nums ${chartView === 'pnl' && latestChartValue! < 0 ? 'text-rose-700' : 'text-[#176B52]'}`}>
-                  {chartView === 'pnl' && latestChartValue! >= 0 ? '+' : ''}{formatPKR(latestChartValue ?? 0, { useLakhFormat: showLakhFormat })}
-                </span>
-              </div>
-
-              <div className="flex items-end h-28 gap-2 px-2 pt-4 border-b border-[#D5DFDA]" data-testid="portfolio-history-chart">
-                {chartSnapshots.map((snap) => {
-                  const val = chartView === 'value' ? snap.totalMarketValue : snap.totalUnrealisedPnL;
-                  const maxVal = Math.max(...chartSnapshots.map((s) => Math.abs(chartView === 'value' ? s.totalMarketValue : s.totalUnrealisedPnL)), 1);
-                  const heightPct = Math.max(15, Math.min(100, (Math.abs(val) / maxVal) * 100));
-                  const dateLabel = chartHasRepeatedDates
-                    ? new Date(snap.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })
-                    : new Date(snap.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-                  return (
-                    <div key={snap.timestamp} className="flex-1 flex flex-col items-center h-full justify-end group relative">
-                      <div
-                        style={{ height: `${heightPct}%` }}
-                        className={`w-full max-w-[32px] rounded-t transition-all group-hover:opacity-80 ${
-                          chartView === 'pnl' && val < 0 ? 'bg-rose-600' : 'bg-[#176B52]'
-                        }`}
-                        title={`${dateLabel}: ${formatPKR(val)}`}
-                      />
-                      <span className="text-[10px] text-[#52635D] mt-1 truncate w-full text-center">
-                        {dateLabel}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex justify-between text-[11px] text-[#52635D]">
-                <span>{chartSnapshots.length} {chartSnapshots.length === 1 ? 'observation' : 'observations'}</span>
-                <span>
-                  {chartSnapshots.length === 1
-                    ? 'Update a price or position to build the trend.'
-                    : `${new Date(chartSnapshots[0].timestamp).toLocaleDateString()} – ${new Date(chartSnapshots[chartSnapshots.length - 1].timestamp).toLocaleDateString()}`}
-                </span>
-              </div>
-            </div>
-          </div>
+          <PortfolioHistoryChart snapshots={chartSnapshots} view={chartView} showLakhFormat={showLakhFormat} />
         )}
       </div>
 

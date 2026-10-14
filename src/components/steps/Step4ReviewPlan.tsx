@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   HorizonPlan,
   InvestmentStatusChoice,
   TrackedWealthItem,
   StockHolding,
+  YearProjectionPoint,
 } from '../../types/horizon';
 import { formatPKR, calculateProjection } from '../../utils/finance';
 import { Check, ShieldCheck, Edit3, AlertCircle } from 'lucide-react';
@@ -18,6 +19,154 @@ interface Step4ReviewPlanProps {
   onNavigateStep: (step: number) => void;
   showLakhFormat: boolean;
 }
+
+interface ProjectionChartProps {
+  timeline: YearProjectionPoint[];
+  showLakhFormat: boolean;
+}
+
+const ProjectionChart: React.FC<ProjectionChartProps> = ({ timeline, showLakhFormat }) => {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const width = 640;
+  const height = 300;
+  const margin = { top: 20, right: 20, bottom: 48, left: 78 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const maxValue = Math.max(
+    1,
+    ...timeline.flatMap((point) => [
+      point.nominalPortfolioValue,
+      point.totalContributions,
+      point.realPurchasingPower,
+    ])
+  );
+  const axisMax = Math.ceil(maxValue / 4 / 100_000) * 4 * 100_000 || maxValue;
+  const getX = (index: number) => margin.left + (index / Math.max(1, timeline.length - 1)) * plotWidth;
+  const getY = (value: number) => margin.top + plotHeight - (value / axisMax) * plotHeight;
+  const makePath = (key: keyof Pick<YearProjectionPoint, 'nominalPortfolioValue' | 'totalContributions' | 'realPurchasingPower'>) =>
+    timeline.map((point, index) => `${index === 0 ? 'M' : 'L'} ${getX(index)} ${getY(point[key])}`).join(' ');
+  const yTicks = Array.from({ length: 5 }, (_, index) => (axisMax / 4) * index);
+  const xTickIndexes = Array.from(new Set([0, Math.round((timeline.length - 1) / 4), Math.round((timeline.length - 1) / 2), Math.round(((timeline.length - 1) * 3) / 4), timeline.length - 1]));
+  const selected = activeIndex === null ? null : timeline[activeIndex];
+  const selectedX = activeIndex === null ? 0 : getX(activeIndex);
+  const tooltipLeft = activeIndex === null ? 0 : (selectedX / width) * 100;
+
+  const selectFromPointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const pointerX = ((event.clientX - bounds.left) / bounds.width) * width;
+    const ratio = Math.max(0, Math.min(1, (pointerX - margin.left) / plotWidth));
+    setActiveIndex(Math.round(ratio * (timeline.length - 1)));
+  };
+
+  const moveSelection = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return;
+    event.preventDefault();
+    setActiveIndex((current) => {
+      if (event.key === 'Home') return 0;
+      if (event.key === 'End') return timeline.length - 1;
+      const start = current ?? 0;
+      return Math.max(0, Math.min(timeline.length - 1, start + (event.key === 'ArrowRight' ? 1 : -1)));
+    });
+  };
+
+  return (
+    <div
+      className="relative w-full rounded-xl border border-[#D5DFDA] bg-[#F8FAF9] px-2 pb-2 pt-3 outline-none focus-visible:ring-2 focus-visible:ring-[#176B52] focus-visible:ring-offset-2"
+      tabIndex={0}
+      onFocus={() => setActiveIndex((current) => current ?? timeline.length - 1)}
+      onBlur={() => setActiveIndex(null)}
+      onKeyDown={moveSelection}
+      aria-label="Interactive growth projection chart. Use the left and right arrow keys to inspect each year."
+      data-testid="projection-chart"
+    >
+      <div className="overflow-x-auto">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="h-[260px] min-w-[560px] w-full touch-pan-x"
+          role="img"
+          aria-labelledby="projection-chart-title projection-chart-description"
+          onPointerMove={selectFromPointer}
+          onPointerLeave={() => setActiveIndex(null)}
+        >
+          <title id="projection-chart-title">Projected portfolio growth over time</title>
+          <desc id="projection-chart-description">Future portfolio, total money invested, and inflation-adjusted buying power by year.</desc>
+          <defs>
+            <linearGradient id="portfolio-area" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#176B52" stopOpacity="0.2" />
+              <stop offset="100%" stopColor="#176B52" stopOpacity="0.01" />
+            </linearGradient>
+          </defs>
+
+          {yTicks.map((tick) => {
+            const y = getY(tick);
+            return (
+              <g key={tick}>
+                <line x1={margin.left} y1={y} x2={width - margin.right} y2={y} stroke="#D5DFDA" strokeWidth="1" />
+                <text x={margin.left - 10} y={y + 4} textAnchor="end" fill="#52635D" fontSize="11">
+                  {formatPKR(tick, { compact: true })}
+                </text>
+              </g>
+            );
+          })}
+
+          {xTickIndexes.map((index) => {
+            const x = getX(index);
+            return (
+              <g key={index}>
+                <line x1={x} y1={margin.top} x2={x} y2={margin.top + plotHeight} stroke="#E5EBE8" strokeWidth="1" />
+                <text x={x} y={height - 20} textAnchor="middle" fill="#52635D" fontSize="11">
+                  {index === 0 ? 'Start' : `Year ${timeline[index].year}`}
+                </text>
+              </g>
+            );
+          })}
+
+          <text x={14} y={margin.top + plotHeight / 2} transform={`rotate(-90 14 ${margin.top + plotHeight / 2})`} textAnchor="middle" fill="#52635D" fontSize="11" fontWeight="600">
+            Portfolio value (PKR)
+          </text>
+          <text x={margin.left + plotWidth / 2} y={height - 2} textAnchor="middle" fill="#52635D" fontSize="11" fontWeight="600">
+            Investment timeline
+          </text>
+
+          <path
+            d={`${makePath('nominalPortfolioValue')} L ${getX(timeline.length - 1)} ${margin.top + plotHeight} L ${getX(0)} ${margin.top + plotHeight} Z`}
+            fill="url(#portfolio-area)"
+            pointerEvents="none"
+          />
+          <path d={makePath('totalContributions')} fill="none" stroke="#8A9A93" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
+          <path d={makePath('realPurchasingPower')} fill="none" stroke="#52635D" strokeWidth="2" strokeDasharray="7 5" strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
+          <path d={makePath('nominalPortfolioValue')} fill="none" stroke="#176B52" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
+
+          {selected && activeIndex !== null && (
+            <g pointerEvents="none">
+              <line x1={selectedX} y1={margin.top} x2={selectedX} y2={margin.top + plotHeight} stroke="#176B52" strokeWidth="1" strokeDasharray="3 3" />
+              <circle cx={selectedX} cy={getY(selected.nominalPortfolioValue)} r="5" fill="#FFFFFF" stroke="#176B52" strokeWidth="3" />
+              <circle cx={selectedX} cy={getY(selected.totalContributions)} r="4" fill="#FFFFFF" stroke="#8A9A93" strokeWidth="2.5" />
+              <circle cx={selectedX} cy={getY(selected.realPurchasingPower)} r="4" fill="#FFFFFF" stroke="#52635D" strokeWidth="2" />
+            </g>
+          )}
+        </svg>
+      </div>
+
+      {selected && (
+        <div
+          className={`pointer-events-none absolute top-5 z-10 min-w-[190px] rounded-xl border border-[#B8CCC4] bg-white p-3 text-[11px] shadow-lg ${tooltipLeft > 67 ? '-translate-x-full' : tooltipLeft < 33 ? '' : '-translate-x-1/2'}`}
+          style={{ left: `${Math.max(3, Math.min(97, tooltipLeft))}%` }}
+          role="status"
+          data-testid="projection-tooltip"
+        >
+          <div className="mb-2 font-bold text-[#172522]">{selected.year === 0 ? 'Starting point' : `End of year ${selected.year}`}</div>
+          <div className="space-y-1.5 tabular-nums">
+            <div className="flex items-center justify-between gap-4"><span className="text-[#176B52]">Future portfolio</span><strong>{formatPKR(selected.nominalPortfolioValue, { useLakhFormat: showLakhFormat })}</strong></div>
+            <div className="flex items-center justify-between gap-4"><span className="text-[#66756F]">Money invested</span><strong>{formatPKR(selected.totalContributions, { useLakhFormat: showLakhFormat })}</strong></div>
+            <div className="flex items-center justify-between gap-4"><span className="text-[#52635D]">Buying power</span><strong>{formatPKR(selected.realPurchasingPower, { useLakhFormat: showLakhFormat })}</strong></div>
+          </div>
+        </div>
+      )}
+      <p className="px-2 pt-1 text-[10px] text-[#52635D] sm:hidden">Swipe the chart to see later years. Tap or drag to inspect values.</p>
+    </div>
+  );
+};
 
 export const Step4ReviewPlan: React.FC<Step4ReviewPlanProps> = ({
   plan,
@@ -36,24 +185,6 @@ export const Step4ReviewPlan: React.FC<Step4ReviewPlanProps> = ({
   const cashRemainingOutside = trackedWealth
     .filter((w) => w.category === 'emergency_cash')
     .reduce((sum, w) => sum + w.amount, 0);
-
-  // SVG dimensions
-  const chartHeight = 160;
-  const chartWidth = 360;
-  const maxVal = Math.max(1, finalPoint.nominalPortfolioValue);
-  const count = projection.timeline.length;
-  const getX = (idx: number) => (idx / (count - 1 || 1)) * (chartWidth - 40) + 20;
-  const getY = (val: number) => chartHeight - (val / maxVal) * (chartHeight - 35) - 15;
-
-  const nominalPath = projection.timeline
-    .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${getX(idx)} ${getY(p.nominalPortfolioValue)}`)
-    .join(' ');
-  const investedPath = projection.timeline
-    .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${getX(idx)} ${getY(p.totalContributions)}`)
-    .join(' ');
-  const realPath = projection.timeline
-    .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${getX(idx)} ${getY(p.realPurchasingPower)}`)
-    .join(' ');
 
   return (
     <div className="space-y-6">
@@ -311,27 +442,7 @@ export const Step4ReviewPlan: React.FC<Step4ReviewPlanProps> = ({
             </div>
           </div>
 
-          <div className="w-full bg-[#F8FAF9] rounded-xl border border-[#D5DFDA] p-2.5 overflow-hidden">
-            <svg
-              viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-              className="w-full h-40 sm:h-48 overflow-visible"
-            >
-              <line x1="20" y1="20" x2={chartWidth - 20} y2="20" stroke="#EAEAEA" strokeWidth="1" />
-              <line x1="20" y1={chartHeight / 2} x2={chartWidth - 20} y2={chartHeight / 2} stroke="#EAEAEA" strokeWidth="1" />
-              <line x1="20" y1={chartHeight - 15} x2={chartWidth - 20} y2={chartHeight - 15} stroke="#D5DFDA" strokeWidth="1" />
-
-              <path d={investedPath} fill="none" stroke="#8A9A93" strokeWidth="2" strokeLinecap="round" />
-              <path d={realPath} fill="none" stroke="#52635D" strokeWidth="1.5" strokeDasharray="4 3" strokeLinecap="round" />
-              <path d={nominalPath} fill="none" stroke="#176B52" strokeWidth="2.5" strokeLinecap="round" />
-
-              <circle cx={getX(count - 1)} cy={getY(finalPoint.nominalPortfolioValue)} r="4" fill="#176B52" />
-            </svg>
-            <div className="flex justify-between text-[11px] text-[#52635D] px-3 pt-1 font-mono">
-              <span>Start</span>
-              <span>Year {Math.round(plan.assumptions.timeHorizonYears / 2)}</span>
-              <span>Year {plan.assumptions.timeHorizonYears}</span>
-            </div>
-          </div>
+          <ProjectionChart timeline={projection.timeline} showLakhFormat={showLakhFormat} />
         </div>
       </div>
 
